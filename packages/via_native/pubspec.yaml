@@ -1,0 +1,19 @@
+name: via_native
+description: Android helpers for the Via app (clipboard, Downloads, share intents), usable from background isolates.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.4
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.kamofa.via_native
+        pluginClass: ViaNativePlugin

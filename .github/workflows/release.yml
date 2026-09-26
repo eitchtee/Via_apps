@@ -1,0 +1,175 @@
+# Builds both apps when a release is published and attaches their installers to it.
+#
+#   Via-<version>-windows-setup.exe   Windows installer (per user, no admin; x64)
+#   Via-<version>-android.apk         Android APK (Android 10+, all ABIs)
+#
+# The release tag is the version: v1.2.3 or 1.2.3. The Android versionCode is derived from it
+# (major * 1000000 + minor * 1000 + patch), so each release must have a higher version.
+#
+# Secrets (all optional):
+#   ANDROID_KEYSTORE_BASE64      base64 of the release keystore (.jks). With the three below, the
+#   ANDROID_KEYSTORE_PASSWORD    APK is signed with it. Without them it is signed with a throwaway
+#   ANDROID_KEY_ALIAS            debug key, and a warning is shown: such APKs can't be updated by
+#   ANDROID_KEY_PASSWORD         properly signed ones (or by each other), so set these up first.
+#   GOOGLE_SERVICES_JSON         the Firebase project's google-services.json (contents). Enables
+#                                FCM wake-ups through the Via FCM relay.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to (re)build and attach to
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  FLUTTER_VERSION: 3.41.6
+  INNO_SETUP_TAG: is-7_1_0
+  INNO_SETUP_ASSET: innosetup-7.1.0-x64.exe
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Version from the release tag
+        id: version
+        run: |
+          version="${TAG#v}"
+          if ! [[ "$version" =~ ^([0-9]+)\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+            echo "::error::Tag '$TAG' is not a version like v1.2.3 (minor and patch below 1000)"
+            exit 1
+          fi
+          code=$(( 10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} ))
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Version $version, build $code"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      CODE: ${{ needs.check.outputs.code }}
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Release keystore
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "VIA_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: No release keystore
+        if: env.KEYSTORE_BASE64 == ''
+        run: echo "::warning::ANDROID_KEYSTORE_* secrets not set; the APK is signed with a debug key"
+
+      - name: Firebase config
+        if: env.GOOGLE_SERVICES_JSON != ''
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Build
+        env:
+          VIA_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VIA_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VIA_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --build-name "$VERSION" --build-number "$CODE"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          cp build/app/outputs/flutter-apk/app-release.apk "out/Via-$VERSION-android.apk"
+          gh release upload "$TAG" out/* --clobber --repo "${{ github.repository }}"
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      CODE: ${{ needs.check.outputs.code }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build
+        run: flutter build windows --release --build-name "$env:VERSION" --build-number "$env:CODE"
+
+      - name: Bundle the Visual C++ runtime
+        run: |
+          # So the app starts on machines without the VC++ redistributable.
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:WINDIR\System32\$dll" build\windows\x64\runner\Release\
+          }
+
+      - name: Inno Setup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download $env:INNO_SETUP_TAG --repo jrsoftware/issrc --pattern $env:INNO_SETUP_ASSET --dir $env:RUNNER_TEMP
+          $signature = Get-AuthenticodeSignature "$env:RUNNER_TEMP\$env:INNO_SETUP_ASSET"
+          if ($signature.Status -ne 'Valid') { throw "Inno Setup installer signature: $($signature.Status)" }
+          $dir = "$env:RUNNER_TEMP\inno"
+          Start-Process "$env:RUNNER_TEMP\$env:INNO_SETUP_ASSET" -Wait -ArgumentList `
+            '/PORTABLE=1', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=`"$dir`""
+          "ISCC=$dir\ISCC.exe" >> $env:GITHUB_ENV
+
+      - name: Build the installer
+        run: '& $env:ISCC /Q "/DAppVersion=$env:VERSION" windows\installer\via.iss'
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:TAG "build\installer\Via-$env:VERSION-windows-setup.exe" --clobber --repo "${{ github.repository }}"
