@@ -15,3 +15,6 @@ key.properties
 
 # Release signing values for the GitHub secrets (see README)
 /release-secrets.txt
+
+# Firebase config for FCM (CI gets it from the GOOGLE_SERVICES_JSON secret)
+/app/google-services.json
