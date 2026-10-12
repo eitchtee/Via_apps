@@ -16,6 +16,10 @@ class ViaNative {
   static Future<bool> openFile(String uri, String mime) async =>
       await _channel.invokeMethod<bool>('openFile', {'uri': uri, 'mime': mime}) ?? false;
 
+  /// Opens Download/Via (or failing that, Downloads) in the file manager.
+  static Future<bool> showDownloadsFolder() async =>
+      await _channel.invokeMethod<bool>('showDownloadsFolder') ?? false;
+
   /// Asks Tasker to query the event plugin whose edit activity is [activity], passing [data]
   /// (strings and string lists) through to its query receiver.
   static Future<void> requestTaskerQuery(String activity, Map<String, Object> data) =>

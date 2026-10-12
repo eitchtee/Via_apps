@@ -2,6 +2,7 @@ package com.kamofa.via_native
 
 import android.Manifest
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -18,6 +19,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -80,6 +82,7 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                     result.success(false)
                 }
             }
+            "showDownloadsFolder" -> result.success(showDownloadsFolder())
             "deviceName" -> {
                 val name = Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
                 result.success(name?.takeIf { it.isNotBlank() } ?: Build.MODEL)
@@ -235,6 +238,29 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             throw e
         }
         return uri.toString()
+    }
+
+    /**
+     * Opens Download/Via in the system file manager. Android can't highlight a file, and
+     * not every file manager takes a folder URI, so this falls back to the Downloads view.
+     */
+    private fun showDownloadsFolder(): Boolean {
+        val folder = DocumentsContract.buildDocumentUri(
+            "com.android.externalstorage.documents", "primary:Download/Via",
+        )
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW).setDataAndType(folder, DocumentsContract.Document.MIME_TYPE_DIR),
+            Intent(DownloadManager.ACTION_VIEW_DOWNLOADS),
+        )
+        for (intent in intents) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (e: Exception) {
+                // Try the next one.
+            }
+        }
+        return false
     }
 
     /** Text and files of an ACTION_SEND(_MULTIPLE) intent. Files are copied to the cache. */
