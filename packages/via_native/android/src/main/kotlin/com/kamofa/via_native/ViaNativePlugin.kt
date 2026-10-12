@@ -181,7 +181,6 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 .setCategories(setOf(SHARE_CATEGORY))
                 .setLongLived(true)
                 .setRank(i)
-                .apply { if (Build.VERSION.SDK_INT >= 33) setExcludedFromSurfaces(ShortcutInfo.SURFACE_LAUNCHER) }
                 .setIntent(open) // required, though shares go to ShareActivity
                 .build()
         }
