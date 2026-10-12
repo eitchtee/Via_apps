@@ -40,6 +40,7 @@ class ComposeForm extends StatefulWidget {
     this.title,
     this.files = const [],
     this.popup = false,
+    this.sendTo,
     required this.onSent,
   });
 
@@ -49,6 +50,10 @@ class ComposeForm extends StatefulWidget {
   final String? title;
   final List<OutgoingFile> files;
   final bool popup;
+
+  /// A target to send to right away, without asking (a share sheet direct target). If
+  /// it's gone, the form asks as usual.
+  final String? sendTo;
   final void Function(String message) onSent;
 
   @override
@@ -91,6 +96,15 @@ class _ComposeFormState extends State<ComposeForm> {
         // With a single other device, there's nothing to choose.
         if (_selected.isEmpty && targets.length == 1) _selected.add(targets.single.id);
       });
+      final sendTo = widget.sendTo;
+      if (sendTo != null && targets.any((t) => t.id == sendTo)) {
+        setState(
+          () => _selected
+            ..clear()
+            ..add(sendTo),
+        );
+        await _send();
+      }
     } catch (e) {
       if (mounted) setState(() => _loadError = '$e');
     }

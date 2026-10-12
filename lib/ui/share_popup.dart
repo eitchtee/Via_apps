@@ -159,6 +159,7 @@ class _SharePopupState extends State<SharePopup> {
           title: kind == SendKind.link ? title : null,
           files: files,
           popup: true,
+          sendTo: data.target,
           onSent: (message) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
             Future<void>.delayed(const Duration(milliseconds: 700), _close);
