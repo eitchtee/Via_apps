@@ -9,6 +9,8 @@ your devices.
 - **Send**: send a link, one or more files, or some text to any of your devices and contacts.
 - **Share target (Android)**: share anything to Via and a popup over the current app asks
   which devices to send it to. Links, text and files are told apart automatically.
+- **Tasker commands (Android)**: text like `!:volume::40` triggers a Tasker task instead of
+  showing up, and Tasker can send commands to your other devices. See [Commands](#commands).
 
 ## Setup
 
@@ -85,6 +87,48 @@ receives live while open and every ~15 minutes in the background.
 
 The application id is `com.kamofa.via`. If you change it, register the new id in Firebase too.
 
+## Commands
+
+A command is text that starts with `!:`, then a name, then any number of params, each after
+`::`:
+
+```
+!:lights_on
+!:volume::40
+!:say::Dinner's ready::pt-BR
+```
+
+The name is a letter followed by one or more letters, digits, `_` or `-`. Anything else is
+plain text: `!:D`, `!:1`, `!:)` and ` !:lights_on` (leading space) aren't commands. Params are
+kept as sent, including empty ones (`!:set::::x` has the params `""` and `x`).
+
+A param that contains `::` or starts with a quote is wrapped in `"…"` or `'…'`:
+`!:ping::"fe80::1"`. Quotes only count when the closing one sits right before the next `::` or
+the end of the text; anything else is literal (`!:say::'tis late`). Only the outer pair is
+removed, so `""hi""` is the param `"hi"`. The *Send Via Command* action quotes params for you.
+
+On Android, a command from one of your own devices doesn't notify and isn't copied: it goes to
+Tasker and is listed in the history. Commands from contacts arrive as normal text unless
+*Settings → Accept commands from contacts* is on. Windows doesn't know about commands and
+treats them as text.
+
+### Tasker
+
+Via is a Tasker plugin with:
+
+- **Event → Plugin → Via → Via Command**: fires for the command names you list (comma-separated,
+  case-insensitive), or for any command. It sets `%via_command`, `%via_params()`
+  (`%via_params1`, `%via_params2`, …), `%via_from` (the sending device) and `%via_raw` (the
+  text as received).
+- **Action → Plugin → Via → Send Via Command**: sends a command to the devices you pick. The
+  name and params can contain Tasker variables. The action waits for the send; on failure it
+  errors with `%errmsg` set.
+
+The event is fired with Tasker's `REQUEST_QUERY` broadcast and the command as pass-through
+data (`ViaNative.requestTaskerQuery`, `CommandQueryReceiver`). The action enqueues a
+`TaskerSendWorker`, which sends from a headless Flutter engine (`taskerSendMain`). Both
+configuration screens are drawn by Flutter (`taskerEditMain`, `lib/ui/tasker_edit.dart`).
+
 ## How it works
 
 The app follows Via's [client guide](../Via/docs/clients.md):
@@ -114,12 +158,14 @@ running window.
 |---|---|
 | `lib/src/api.dart` | HTTP client for the Via API |
 | `lib/src/receiver.dart` | Inbox sync and handling of received items |
+| `lib/src/command.dart` | Parsing and encoding of commands (`!:name::param`) |
+| `lib/src/tasker.dart` | Hands received commands to Tasker; sends commands for the Tasker action |
 | `lib/src/live.dart` | SSE connection, Android background scheduling and FCM registration |
 | `lib/src/history.dart` | Local history (a JSON file) and handled ids |
 | `lib/src/desktop.dart` | Windows tray, window and autostart |
-| `lib/ui/` | Onboarding, send, history, settings and the share popup |
-| `packages/via_native/` | Android plugin: clipboard, MediaStore Downloads, share intents (works in background engines) |
-| `android/app/src/main/kotlin/` | `ShareActivity`, FCM `WakeService` and `WakeWorker` |
+| `lib/ui/` | Onboarding, send, history, settings, the share popup and the Tasker plugin screens |
+| `packages/via_native/` | Android plugin: clipboard, MediaStore Downloads, share intents, Tasker queries (works in background engines) |
+| `android/app/src/main/kotlin/` | `ShareActivity`, FCM `WakeService`, `WakeWorker`, the headless engine runner and the Tasker plugin (`tasker/`) |
 | `scripts/update_icons.py` | Copies the icons from `../Via/branding` (`python scripts/update_icons.py`) |
 
 ## Tests
