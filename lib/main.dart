@@ -11,9 +11,11 @@ import 'src/history.dart';
 import 'src/live.dart';
 import 'src/notify.dart';
 import 'src/receiver.dart';
+import 'src/tasker.dart';
 import 'ui/home.dart';
 import 'ui/onboarding.dart';
 import 'ui/share_popup.dart';
+import 'ui/tasker_edit.dart';
 
 const _seed = Color(0xFF0E7C66);
 
@@ -46,6 +48,22 @@ void shareMain() {
   );
 }
 
+/// Configures the Tasker event or action (TaskerEditActivity).
+@pragma('vm:entry-point')
+void taskerEditMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    MaterialApp(
+      title: 'Via',
+      debugShowCheckedModeBanner: false,
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
+      color: Colors.transparent,
+      home: const TaskerEditPopup(),
+    ),
+  );
+}
+
 /// Talks to the Kotlin side of a headless engine (Headless.kt): reads its arguments, and
 /// must always end with [done].
 const _headless = MethodChannel('via/headless');
@@ -60,6 +78,20 @@ Future<void> wakeMain() async {
     await Receiver.sync();
   } finally {
     await _headless.invokeMethod('done');
+  }
+}
+
+/// Headless send for Tasker's "Send Via Command" action (TaskerSendWorker).
+@pragma('vm:entry-point')
+Future<void> taskerSendMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  String? error;
+  try {
+    error = await Tasker.send((await _headless.invokeMapMethod<String, dynamic>('args'))!);
+  } catch (e) {
+    error = '$e';
+  } finally {
+    await _headless.invokeMethod('done', {'error': error});
   }
 }
 

@@ -54,6 +54,50 @@
             </intent-filter>
         </activity>
 
+        <!-- Tasker plugin: the "Via Command" event and the "Send Via Command" action. -->
+        <activity
+            android:name=".tasker.CommandEventEditActivity"
+            android:exported="true"
+            android:label="Via Command"
+            android:icon="@mipmap/ic_launcher"
+            android:excludeFromRecents="true"
+            android:theme="@style/ShareTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="net.dinglisch.android.tasker.ACTION_EDIT_EVENT" />
+            </intent-filter>
+        </activity>
+        <receiver
+            android:name=".tasker.CommandQueryReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.QUERY_CONDITION" />
+            </intent-filter>
+        </receiver>
+        <activity
+            android:name=".tasker.SendCommandEditActivity"
+            android:exported="true"
+            android:label="Send Via Command"
+            android:icon="@mipmap/ic_launcher"
+            android:excludeFromRecents="true"
+            android:theme="@style/ShareTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+            </intent-filter>
+        </activity>
+        <receiver
+            android:name=".tasker.SendCommandReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".WakeService"
             android:exported="false">
