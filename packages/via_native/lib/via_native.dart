@@ -29,11 +29,32 @@ class ViaNative {
   /// Opens the system screen to grant [hasAllFilesAccess] (or asks for it on Android 10).
   static Future<void> requestAllFilesAccess() => _channel.invokeMethod('requestAllFilesAccess');
 
+  /// Shows [targets] in the system share sheet as direct targets, most relevant first,
+  /// replacing the previous ones. Does nothing before Android 10.
+  static Future<void> setShareTargets(List<ShareTarget> targets) => _channel.invokeMethod('setShareTargets', {
+    'targets': [
+      for (final t in targets) {'id': t.id, 'label': t.label, 'type': t.type},
+    ],
+  });
+
+  /// Tells the system these share targets were just used, so it ranks them higher.
+  static Future<void> reportShareTargetUsed(List<String> ids) =>
+      _channel.invokeMethod('reportShareTargetUsed', {'ids': ids});
+
   /// What was shared to the current activity, or null if it wasn't started by a share.
   static Future<SharedData?> getSharedData() async {
     final raw = await _channel.invokeMapMethod<String, dynamic>('getSharedData');
     return raw == null ? null : SharedData._(raw);
   }
+}
+
+class ShareTarget {
+  ShareTarget(this.id, this.label, this.type);
+  final String id;
+  final String label;
+
+  /// Picks the icon: android, ios, desktop, browser, cli, contact or anything else.
+  final String type;
 }
 
 class SharedFile {
@@ -48,6 +69,7 @@ class SharedData {
   SharedData._(Map<String, dynamic> raw)
     : text = raw['text'] as String?,
       subject = raw['subject'] as String?,
+      target = raw['target'] as String?,
       files = [
         for (final f in (raw['files'] as List? ?? const []))
           SharedFile(
@@ -61,4 +83,7 @@ class SharedData {
   final String? text;
   final String? subject;
   final List<SharedFile> files;
+
+  /// The [ShareTarget.id] picked in the share sheet, if a direct target was used.
+  final String? target;
 }

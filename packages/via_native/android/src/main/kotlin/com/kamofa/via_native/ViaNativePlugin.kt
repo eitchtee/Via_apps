@@ -8,6 +8,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -89,6 +94,17 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 requestAllFilesAccess()
                 result.success(null)
             }
+            "setShareTargets" -> {
+                setShareTargets(call.argument<List<Map<String, String>>>("targets")!!)
+                result.success(null)
+            }
+            "reportShareTargetUsed" -> {
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val sm = context.getSystemService(ShortcutManager::class.java)
+                    call.argument<List<String>>("ids")!!.forEach { sm.reportShortcutUsed(it) }
+                }
+                result.success(null)
+            }
             "getSharedData" -> {
                 val intent = activity?.intent
                 if (intent == null) {
@@ -152,6 +168,61 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
     }
 
+    /**
+     * Publishes [targets] (id, label, type; most relevant first) as the share sheet's direct
+     * targets, replacing the previous ones. Sharing Shortcuts need Android 10.
+     */
+    private fun setShareTargets(targets: List<Map<String, String>>) {
+        if (Build.VERSION.SDK_INT < 29) return
+        val sm = context.getSystemService(ShortcutManager::class.java)
+        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+        val shortcuts = targets.take(sm.maxShortcutCountPerActivity).mapIndexed { i, t ->
+            ShortcutInfo.Builder(context, t["id"]!!)
+                .setShortLabel(t["label"]!!)
+                .setIcon(targetIcon(t["type"]))
+                .setCategories(setOf(SHARE_CATEGORY))
+                .setLongLived(true)
+                .setRank(i)
+                .setIntent(open) // required, though shares go to ShareActivity
+                .apply { if (Build.VERSION.SDK_INT >= 33) setExcludedFromSurfaces(ShortcutInfo.SURFACE_LAUNCHER) }
+                .build()
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            // The share sheet caches long-lived shortcuts: drop the ones no longer listed.
+            val keep = shortcuts.map { it.id }.toSet()
+            val stale = sm.getShortcuts(ShortcutManager.FLAG_MATCH_DYNAMIC or ShortcutManager.FLAG_MATCH_CACHED)
+                .map { it.id }
+                .filter { it !in keep }
+            if (stale.isNotEmpty()) sm.removeLongLivedShortcuts(stale)
+        }
+        sm.dynamicShortcuts = shortcuts
+    }
+
+    /** The device type's glyph on Via's green, as an adaptive icon. */
+    private fun targetIcon(type: String?): Icon {
+        val glyph = when (type) {
+            "android" -> R.drawable.via_target_android
+            "ios" -> R.drawable.via_target_ios
+            "desktop" -> R.drawable.via_target_desktop
+            "browser" -> R.drawable.via_target_browser
+            "cli" -> R.drawable.via_target_cli
+            "contact" -> R.drawable.via_target_contact
+            else -> R.drawable.via_target_other
+        }
+        // Adaptive icons are 108dp, of which the middle 72dp is shown.
+        val size = (108 * context.resources.displayMetrics.density).toInt()
+        val glyphSize = size * 4 / 9
+        val offset = (size - glyphSize) / 2
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(0xFF0E7C66.toInt())
+        context.getDrawable(glyph)!!.apply {
+            setBounds(offset, offset, offset + glyphSize, offset + glyphSize)
+            draw(canvas)
+        }
+        return Icon.createWithAdaptiveBitmap(bitmap)
+    }
+
     /** Copies [path] into Download/Via through MediaStore and returns the content URI. */
     private fun saveToDownloads(path: String, name: String, mime: String): String {
         val resolver = context.contentResolver
@@ -192,6 +263,8 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             "text" to intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
             "subject" to intent.getStringExtra(Intent.EXTRA_SUBJECT),
             "files" to files,
+            // Set when the user picked one of the share sheet's direct targets.
+            "target" to intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID),
         )
     }
 
@@ -222,6 +295,11 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private fun Intent.getParcelableArrayListExtraCompat(key: String): ArrayList<Uri>? =
         if (Build.VERSION.SDK_INT >= 33) getParcelableArrayListExtra(key, Uri::class.java)
         else getParcelableArrayListExtra(key)
+
+    companion object {
+        /** Matches the share-target category in the app's res/xml/shortcuts.xml. */
+        private const val SHARE_CATEGORY = "com.kamofa.via.category.SHARE_TARGET"
+    }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
