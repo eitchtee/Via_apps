@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -22,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.random.Random
 
 /**
  * Native helpers that must also work from background isolates (FCM, WorkManager), where
@@ -75,6 +77,10 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 val name = Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
                 result.success(name?.takeIf { it.isNotBlank() } ?: Build.MODEL)
             }
+            "requestTaskerQuery" -> {
+                requestTaskerQuery(call.argument<String>("activity")!!, call.argument<Map<String, Any?>>("data")!!)
+                result.success(null)
+            }
             "getSharedData" -> {
                 val intent = activity?.intent
                 if (intent == null) {
@@ -96,6 +102,27 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 main.post { result.error("failed", e.message, null) }
             }
         }
+    }
+
+    /**
+     * Tasker's REQUEST_QUERY for an event plugin: Tasker then queries the plugin's receiver
+     * once per profile, handing it [data] as the "pass-through" bundle.
+     */
+    private fun requestTaskerQuery(activity: String, data: Map<String, Any?>) {
+        val passThrough = Bundle().apply {
+            for ((key, value) in data) {
+                when (value) {
+                    is String -> putString(key, value)
+                    is List<*> -> putStringArrayList(key, ArrayList(value.map { it.toString() }))
+                }
+            }
+            putInt("net.dinglisch.android.tasker.MESSAGE_ID", Random.nextInt())
+        }
+        context.sendBroadcast(
+            Intent("com.twofortyfouram.locale.intent.action.REQUEST_QUERY")
+                .putExtra("com.twofortyfouram.locale.intent.extra.ACTIVITY", activity)
+                .putExtra("net.dinglisch.android.tasker.extras.PASS_THROUGH_DATA", passThrough),
+        )
     }
 
     /** Copies [path] into Download/Via through MediaStore and returns the content URI. */

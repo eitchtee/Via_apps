@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../src/command.dart';
 import '../src/config.dart';
 import '../src/history.dart';
 import '../src/platform.dart';
@@ -307,6 +308,7 @@ class _HistoryTile extends StatelessWidget {
           _ => e.error ?? 'Download failed',
         },
       ),
+      'command' => _command(e),
       _ => (Icons.help_outline, e.kind, null),
     };
     final failed = e.status != 'ok';
@@ -336,6 +338,13 @@ class _HistoryTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static (IconData, String, String?) _command(HistoryEntry e) {
+    final command = ViaCommand.parse(e.body ?? '');
+    if (command == null) return (Icons.bolt, e.body ?? '', e.error);
+    final detail = e.status == 'ok' ? command.params.join(' · ') : e.error;
+    return (Icons.bolt, command.name, detail);
   }
 
   static String _when(DateTime t) {

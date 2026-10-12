@@ -16,6 +16,11 @@ class ViaNative {
   static Future<bool> openFile(String uri, String mime) async =>
       await _channel.invokeMethod<bool>('openFile', {'uri': uri, 'mime': mime}) ?? false;
 
+  /// Asks Tasker to query the event plugin whose edit activity is [activity], passing [data]
+  /// (strings and string lists) through to its query receiver.
+  static Future<void> requestTaskerQuery(String activity, Map<String, Object> data) =>
+      _channel.invokeMethod('requestTaskerQuery', {'activity': activity, 'data': data});
+
   /// What was shared to the current activity, or null if it wasn't started by a share.
   static Future<SharedData?> getSharedData() async {
     final raw = await _channel.invokeMapMethod<String, dynamic>('getSharedData');

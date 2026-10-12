@@ -6,14 +6,16 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'api.dart';
+import 'command.dart';
 import 'config.dart';
 import 'history.dart';
 import 'models.dart';
 import 'notify.dart';
 import 'platform.dart';
+import 'tasker.dart';
 
 /// Fetches the inbox and handles each item: links are opened, text is copied, files are
-/// saved to Downloads. An item is acked only once handled (see the server's clients.md).
+/// saved to Downloads. On Android, text that is a command ([ViaCommand]) goes to Tasker. An item is acked only once handled (see the server's clients.md).
 class Receiver {
   /// Whether the app is visible. On Android, links can't be opened from the background,
   /// so they wait for a tap on the notification.
@@ -112,9 +114,9 @@ class Receiver {
   /// Returns true when the item may be acked.
   static Future<bool> _handle(ViaApi api, InboxItem item, String from) async {
     final fromContact = item.sender != null;
-    HistoryEntry base(String status, {String? location, String? error}) => HistoryEntry(
+    HistoryEntry base(String status, {String? kind, String? location, String? error}) => HistoryEntry(
       id: item.id,
-      kind: item.kind,
+      kind: kind ?? item.kind,
       receivedAt: DateTime.now(),
       from: from,
       fromContact: fromContact,
@@ -146,6 +148,17 @@ class Receiver {
 
       case 'note':
         final text = item.body ?? item.title ?? '';
+        final command = Platform.isAndroid ? ViaCommand.parse(text) : null;
+        if (command != null && (!fromContact || await Tasker.acceptsFromContacts())) {
+          // No notification and no clipboard: only Tasker sees it.
+          try {
+            await Tasker.commandReceived(command, from: from, raw: text);
+            await History.put(base('ok', kind: 'command'), handled: true);
+          } catch (e) {
+            await History.put(base('failed', kind: 'command', error: 'Could not reach Tasker: $e'), handled: true);
+          }
+          return true;
+        }
         final auto = !fromContact && await Prefs.getBool('auto_copy_text', fallback: true);
         var copied = false;
         if (auto) {
@@ -215,6 +228,8 @@ class Receiver {
   /// What tapping a received item does: open the link or file, or copy the text.
   static Future<String?> activate(HistoryEntry e) async {
     switch (e.kind) {
+      case 'command':
+        return e.status == 'ok' ? 'Command passed to Tasker' : e.error;
       case 'link':
         return await LocalActions.openUrl(e.url ?? '') ? null : 'Could not open the link';
       case 'note':

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../src/api.dart';
@@ -5,6 +7,7 @@ import '../src/config.dart';
 import '../src/desktop.dart';
 import '../src/history.dart';
 import '../src/live.dart';
+import '../src/tasker.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.account, required this.onAccountChanged});
@@ -20,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late Account _account = widget.account;
   bool _autoOpen = true;
   bool _autoCopy = true;
+  bool _contactCommands = false;
   bool? _startup;
 
   @override
@@ -31,11 +35,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadPrefs() async {
     final autoOpen = await Prefs.getBool('auto_open_links', fallback: true);
     final autoCopy = await Prefs.getBool('auto_copy_text', fallback: true);
+    final contactCommands = await Tasker.acceptsFromContacts();
     final startup = Desktop.supported ? await Desktop.instance.startsWithWindows() : null;
     if (mounted) {
       setState(() {
         _autoOpen = autoOpen;
         _autoCopy = autoCopy;
+        _contactCommands = contactCommands;
         _startup = startup;
       });
     }
@@ -220,6 +226,27 @@ class _SettingsPageState extends State<SettingsPage> {
               Prefs.setBool('auto_copy_text', v);
             },
           ),
+          if (Platform.isAndroid) ...[
+            header('Commands'),
+            ListTile(
+              leading: const Icon(Icons.bolt),
+              title: const Text('Tasker commands'),
+              subtitle: const Text(
+                'Text like !:name::param::param from your devices goes to the "Via Command" '
+                'event in Tasker instead of being shown or copied.',
+              ),
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.person_outline),
+              title: const Text('Accept commands from contacts'),
+              subtitle: const Text('Off: commands from contacts arrive as normal text'),
+              value: _contactCommands,
+              onChanged: (v) {
+                setState(() => _contactCommands = v);
+                Tasker.setAcceptsFromContacts(v);
+              },
+            ),
+          ],
           if (_startup != null) ...[
             header('Windows'),
             SwitchListTile(
