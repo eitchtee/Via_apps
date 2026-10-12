@@ -46,6 +46,10 @@ void shareMain() {
   );
 }
 
+/// Talks to the Kotlin side of a headless engine (Headless.kt): reads its arguments, and
+/// must always end with [done].
+const _headless = MethodChannel('via/headless');
+
 /// Headless sync after an FCM wake-up (WakeWorker).
 @pragma('vm:entry-point')
 Future<void> wakeMain() async {
@@ -55,7 +59,7 @@ Future<void> wakeMain() async {
     await AndroidBackground.registerPush();
     await Receiver.sync();
   } finally {
-    await const MethodChannel('via/wake').invokeMethod('done');
+    await _headless.invokeMethod('done');
   }
 }
 
