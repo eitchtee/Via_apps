@@ -9,8 +9,9 @@ your devices.
 - **Send**: send a link, one or more files, or some text to any of your devices and contacts.
 - **Share target (Android)**: share anything to Via and a popup over the current app asks
   which devices to send it to. Links, text and files are told apart automatically.
-- **Tasker commands (Android)**: text like `!:volume::40` triggers a Tasker task instead of
-  showing up, and Tasker can send commands to your other devices. See [Commands](#commands).
+- **Tasker (Android)**: Tasker can send text, links, files and commands to your devices, and
+  (when turned on) text like `!:volume::40` triggers a Tasker task instead of showing up. See
+  [Commands](#commands).
 
 ## Setup
 
@@ -107,10 +108,10 @@ A param that contains `::` or starts with a quote is wrapped in `"…"` or `'…
 the end of the text; anything else is literal (`!:say::'tis late`). Only the outer pair is
 removed, so `""hi""` is the param `"hi"`. The *Send Via Command* action quotes params for you.
 
-On Android, a command from one of your own devices doesn't notify and isn't copied: it goes to
-Tasker and is listed in the history. Commands from contacts arrive as normal text unless
-*Settings → Accept commands from contacts* is on. Windows doesn't know about commands and
-treats them as text.
+On Android, with *Settings → Pass commands to Tasker* on (it's off by default), a command from
+one of your own devices doesn't notify and isn't copied: it goes to Tasker and is listed in the
+history. Commands from contacts arrive as normal text unless *Also from contacts* is on too.
+Windows doesn't know about commands and treats them as text.
 
 ### Tasker
 
@@ -121,13 +122,19 @@ Via is a Tasker plugin with:
   (`%via_params1`, `%via_params2`, …), `%via_from` (the sending device) and `%via_raw` (the
   text as received).
 - **Action → Plugin → Via → Send Via Command**: sends a command to the devices you pick. The
-  name and params can contain Tasker variables. The action waits for the send; on failure it
-  errors with `%errmsg` set.
+  name and params can contain Tasker variables.
+- **Action → Plugin → Via → Send with Via**: sends text (with an optional title), a link, or
+  files to the devices you pick, with Tasker variables allowed. Files are given by path: one
+  per line, or a Tasker array like `%files()`. Reading them needs Android's *All files access*,
+  which the action's screen asks for.
+
+Both actions wait for the send; on failure they error with `%errmsg` set.
 
 The event is fired with Tasker's `REQUEST_QUERY` broadcast and the command as pass-through
-data (`ViaNative.requestTaskerQuery`, `CommandQueryReceiver`). The action enqueues a
-`TaskerSendWorker`, which sends from a headless Flutter engine (`taskerSendMain`). Both
-configuration screens are drawn by Flutter (`taskerEditMain`, `lib/ui/tasker_edit.dart`).
+data (`ViaNative.requestTaskerQuery`, `CommandQueryReceiver`). Both actions go through
+`TaskerActionReceiver`, which enqueues a `TaskerSendWorker` that sends from a headless Flutter
+engine (`taskerSendMain`). The configuration screens are drawn by Flutter (`taskerEditMain`,
+`lib/ui/tasker_edit.dart`).
 
 ## How it works
 
