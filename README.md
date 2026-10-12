@@ -8,7 +8,9 @@ your devices.
   local history.
 - **Send**: send a link, one or more files, or some text to any of your devices and contacts.
 - **Share target (Android)**: share anything to Via and a popup over the current app asks
-  which devices to send it to. Links, text and files are told apart automatically.
+  which devices to send it to. Links, text and files are told apart automatically. On
+  Android 10+, your devices and contacts also appear as direct targets at the top of the
+  share sheet; picking one sends straight to it.
 - **Tasker (Android)**: Tasker can send text, links, files and commands to your devices, and
   (when turned on) text like `!:volume::40` triggers a Tasker task instead of showing up. See
   [Commands](#commands).
