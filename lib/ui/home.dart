@@ -257,7 +257,7 @@ class _HistoryTabState extends State<HistoryTab> with WidgetsBindingObserver {
                         await LocalActions.copyText(e.url ?? e.body ?? e.title ?? '');
                         _snack('Copied to clipboard');
                       case 'folder':
-                        await LocalActions.showInFolder(e.location!);
+                        if (!await LocalActions.showInFolder(e.location!)) _snack('Could not open the folder');
                       case 'retry':
                         await Receiver.retry(e.id);
                       case 'delete':
@@ -332,7 +332,7 @@ class _HistoryTile extends StatelessWidget {
           if (e.kind != 'file') const PopupMenuItem(value: 'copy', child: Text('Copy')),
           if (e.kind == 'file' && e.status == 'failed')
             const PopupMenuItem(value: 'retry', child: Text('Retry')),
-          if (e.kind == 'file' && e.location != null && Platform.isWindows)
+          if (e.kind == 'file' && e.location != null && (Platform.isWindows || Platform.isAndroid))
             const PopupMenuItem(value: 'folder', child: Text('Show in folder')),
           const PopupMenuItem(value: 'delete', child: Text('Remove from history')),
         ],

@@ -65,9 +65,12 @@ class LocalActions {
     return launchUrl(Uri.file(location));
   }
 
-  /// Shows the file in Explorer (Windows only).
-  static Future<void> showInFolder(String path) async {
-    if (Platform.isWindows) await Process.start('explorer.exe', ['/select,', path]);
+  /// Shows the file in Explorer on Windows. On Android, opens the folder received files
+  /// are saved to, since the file itself can't be highlighted.
+  static Future<bool> showInFolder(String location) async {
+    if (Platform.isAndroid) return ViaNative.showDownloadsFolder();
+    if (Platform.isWindows) await Process.start('explorer.exe', ['/select,', location]);
+    return true;
   }
 
   /// A file name that is safe on Windows and Android: no path separators, reserved
