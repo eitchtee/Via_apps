@@ -1,14 +1,17 @@
 package com.kamofa.via_native
 
+import android.Manifest
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -81,6 +84,11 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 requestTaskerQuery(call.argument<String>("activity")!!, call.argument<Map<String, Any?>>("data")!!)
                 result.success(null)
             }
+            "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
+            "requestAllFilesAccess" -> {
+                requestAllFilesAccess()
+                result.success(null)
+            }
             "getSharedData" -> {
                 val intent = activity?.intent
                 if (intent == null) {
@@ -123,6 +131,25 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 .putExtra("com.twofortyfouram.locale.intent.extra.ACTIVITY", activity)
                 .putExtra("net.dinglisch.android.tasker.extras.PASS_THROUGH_DATA", passThrough),
         )
+    }
+
+    private fun hasAllFilesAccess(): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) {
+            Environment.isExternalStorageManager()
+        } else {
+            context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+
+    private fun requestAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:${context.packageName}"),
+            )
+            (activity ?: context.also { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }).startActivity(intent)
+        } else {
+            activity?.requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 0)
+        }
     }
 
     /** Copies [path] into Download/Via through MediaStore and returns the content URI. */

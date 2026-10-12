@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:via_native/via_native.dart';
 
 import '../src/command.dart';
 import '../src/config.dart';
@@ -7,8 +8,8 @@ import '../src/sender.dart';
 import '../src/tasker.dart';
 import 'compose.dart';
 
-/// What Tasker opens to configure the "Via Command" event or the "Send Via Command" action,
-/// as a dialog over Tasker.
+/// What Tasker opens to configure the "Via Command" event or one of the actions ("Send Via
+/// Command", "Send with Via"), as a dialog over Tasker.
 class TaskerEditPopup extends StatefulWidget {
   const TaskerEditPopup({super.key});
 
@@ -54,7 +55,8 @@ class _TaskerEditPopupState extends State<TaskerEditPopup> {
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     'event' => _EventForm(values: _values),
-                    _ => _ActionForm(values: _values),
+                    'item' => _ItemForm(values: _values),
+                    _ => _CommandForm(values: _values),
                   },
                 ),
               ),
@@ -66,11 +68,11 @@ class _TaskerEditPopupState extends State<TaskerEditPopup> {
   }
 }
 
-Widget _header(BuildContext context, String title) => Padding(
+Widget _header(BuildContext context, IconData icon, String title) => Padding(
   padding: const EdgeInsets.only(bottom: 12),
   child: Row(
     children: [
-      Icon(Icons.bolt, color: Theme.of(context).colorScheme.primary),
+      Icon(icon, color: Theme.of(context).colorScheme.primary),
       const SizedBox(width: 12),
       Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
     ],
@@ -134,7 +136,7 @@ class _EventFormState extends State<_EventForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(context, 'Via Command'),
+        _header(context, Icons.bolt, 'Via Command'),
         if (_enabled == false)
           Card.filled(
             color: theme.colorScheme.errorContainer,
@@ -179,33 +181,103 @@ class _EventFormState extends State<_EventForm> {
   }
 }
 
-class _ActionForm extends StatefulWidget {
-  const _ActionForm({required this.values});
+/// What both send actions share: picking the devices and contacts to send to.
+abstract class _SendFormState<T extends StatefulWidget> extends State<T> {
+  Map<String, String> get values;
 
-  final Map<String, String> values;
-
-  @override
-  State<_ActionForm> createState() => _ActionFormState();
-}
-
-class _ActionFormState extends State<_ActionForm> {
-  late final _command = TextEditingController(text: widget.values['command'] ?? '');
-  late final List<TextEditingController> _params = [
-    for (var i = 0; i < (int.tryParse(widget.values['param_count'] ?? '') ?? 0); i++)
-      TextEditingController(text: widget.values['param$i'] ?? ''),
-  ];
-  late final Set<String> _selected = {
-    for (final id in (widget.values['to'] ?? '').split(',')) if (id.isNotEmpty) id,
+  late final Set<String> selected = {
+    for (final id in (values['to'] ?? '').split(',')) if (id.isNotEmpty) id,
   };
-  Account? _account;
+  Account? account;
   List<Target>? _targets;
   String? _error;
+
+  String get targetNames => _targets!.where((t) => selected.contains(t.id)).map((t) => t.label).join(', ');
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadTargets();
   }
+
+  Future<void> _loadTargets() async {
+    setState(() => _error = null);
+    try {
+      final account = await Account.load();
+      if (account == null) {
+        setState(() => _error = 'Open Via and connect it to your server first.');
+        return;
+      }
+      final targets = await Sender.targets(account);
+      setState(() {
+        this.account = account;
+        _targets = targets;
+        selected.retainWhere((id) => targets.any((t) => t.id == id));
+      });
+    } catch (e) {
+      setState(() => _error = 'Could not load your devices: $e');
+    }
+  }
+
+  Widget targetPicker(ThemeData theme) {
+    if (_error != null) {
+      return Row(
+        children: [
+          Expanded(child: Text(_error!, style: TextStyle(color: theme.colorScheme.error))),
+          if (!_error!.startsWith('Open Via')) TextButton(onPressed: _loadTargets, child: const Text('Retry')),
+        ],
+      );
+    }
+    final targets = _targets;
+    if (targets == null) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (targets.isEmpty) return const Text('No other devices yet.');
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final t in targets)
+          FilterChip(
+            avatar: Icon(iconForType(t.type), size: 18),
+            label: Text(t.label),
+            selected: selected.contains(t.id),
+            showCheckmark: false,
+            onSelected: (on) => setState(() => on ? selected.add(t.id) : selected.remove(t.id)),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> toSection(ThemeData theme) => [
+    Text('To', style: theme.textTheme.labelLarge),
+    const SizedBox(height: 8),
+    targetPicker(theme),
+    const SizedBox(height: 16),
+  ];
+}
+
+class _CommandForm extends StatefulWidget {
+  const _CommandForm({required this.values});
+
+  final Map<String, String> values;
+
+  @override
+  State<_CommandForm> createState() => _CommandFormState();
+}
+
+class _CommandFormState extends _SendFormState<_CommandForm> {
+  @override
+  Map<String, String> get values => widget.values;
+
+  late final _command = TextEditingController(text: values['command'] ?? '');
+  late final List<TextEditingController> _params = [
+    for (var i = 0; i < (int.tryParse(values['param_count'] ?? '') ?? 0); i++)
+      TextEditingController(text: values['param$i'] ?? ''),
+  ];
 
   @override
   void dispose() {
@@ -216,37 +288,18 @@ class _ActionFormState extends State<_ActionForm> {
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _error = null);
-    try {
-      final account = await Account.load();
-      if (account == null) {
-        setState(() => _error = 'Open Via and connect it to your server first.');
-        return;
-      }
-      final targets = await Sender.targets(account);
-      setState(() {
-        _account = account;
-        _targets = targets;
-        _selected.retainWhere((id) => targets.any((t) => t.id == id));
-      });
-    } catch (e) {
-      setState(() => _error = 'Could not load your devices: $e');
-    }
-  }
-
   void _save() {
-    final names = _targets!.where((t) => _selected.contains(t.id)).map((t) => t.label);
     final name = _command.text.trim();
     final params = [for (final p in _params) p.text];
     TaskerEditChannel.save(
       {
-        'to': _selected.join(','),
+        'type': 'command',
+        'to': selected.join(','),
         'command': name,
         'param_count': '${params.length}',
         for (final (i, p) in params.indexed) 'param$i': p,
       },
-      '${[name, ...params].join(' · ')} → ${names.join(', ')}',
+      '${[name, ...params].join(' · ')} → $targetNames',
     );
   }
 
@@ -255,16 +308,13 @@ class _ActionFormState extends State<_ActionForm> {
     final theme = Theme.of(context);
     final name = _command.text.trim();
     final nameError = name.isEmpty || _validName(name) ? null : 'Letters, digits, _ and -, starting with a letter';
-    final canSave = _account != null && _selected.isNotEmpty && name.isNotEmpty && nameError == null;
+    final canSave = account != null && selected.isNotEmpty && name.isNotEmpty && nameError == null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(context, 'Send Via Command'),
-        Text('To', style: theme.textTheme.labelLarge),
-        const SizedBox(height: 8),
-        _targetPicker(theme),
-        const SizedBox(height: 16),
+        _header(context, Icons.bolt, 'Send Via Command'),
+        ...toSection(theme),
         TextField(
           controller: _command,
           decoration: InputDecoration(
@@ -304,37 +354,139 @@ class _ActionFormState extends State<_ActionForm> {
       ],
     );
   }
+}
 
-  Widget _targetPicker(ThemeData theme) {
-    if (_error != null) {
-      return Row(
-        children: [
-          Expanded(child: Text(_error!, style: TextStyle(color: theme.colorScheme.error))),
-          if (_account != null || !_error!.startsWith('Open Via'))
-            TextButton(onPressed: _load, child: const Text('Retry')),
-        ],
-      );
-    }
-    final targets = _targets;
-    if (targets == null) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (targets.isEmpty) return const Text('No other devices yet.');
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+class _ItemForm extends StatefulWidget {
+  const _ItemForm({required this.values});
+
+  final Map<String, String> values;
+
+  @override
+  State<_ItemForm> createState() => _ItemFormState();
+}
+
+class _ItemFormState extends _SendFormState<_ItemForm> with WidgetsBindingObserver {
+  @override
+  Map<String, String> get values => widget.values;
+
+  late SendKind _kind = switch (values['kind']) {
+    'link' => SendKind.link,
+    'file' => SendKind.file,
+    _ => SendKind.text,
+  };
+  late final _content = TextEditingController(text: values['content'] ?? '');
+  late final _title = TextEditingController(text: values['title'] ?? '');
+  bool? _fileAccess;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkFileAccess();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _content.dispose();
+    _title.dispose();
+    super.dispose();
+  }
+
+  // Back from the system's "All files access" screen.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkFileAccess();
+  }
+
+  Future<void> _checkFileAccess() async {
+    final access = await ViaNative.hasAllFilesAccess();
+    if (mounted) setState(() => _fileAccess = access);
+  }
+
+  void _save() {
+    final content = _content.text;
+    final title = _kind == SendKind.file ? '' : _title.text.trim();
+    final what = switch (_kind) {
+      SendKind.text => 'Text',
+      SendKind.link => 'Link',
+      SendKind.file => 'File',
+    };
+    final preview = content.trim().split('\n').first;
+    TaskerEditChannel.save(
+      {
+        'type': 'item',
+        'to': selected.join(','),
+        'kind': _kind.name,
+        'content': content,
+        'title': title,
+      },
+      '$what: ${preview.length > 60 ? '${preview.substring(0, 60)}…' : preview} → $targetNames',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final canSave = account != null && selected.isNotEmpty && _content.text.trim().isNotEmpty;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final t in targets)
-          FilterChip(
-            avatar: Icon(iconForType(t.type), size: 18),
-            label: Text(t.label),
-            selected: _selected.contains(t.id),
-            showCheckmark: false,
-            onSelected: (on) => setState(() => on ? _selected.add(t.id) : _selected.remove(t.id)),
+        _header(context, Icons.send_outlined, 'Send with Via'),
+        ...toSection(theme),
+        SegmentedButton<SendKind>(
+          segments: const [
+            ButtonSegment(value: SendKind.text, icon: Icon(Icons.notes), label: Text('Text')),
+            ButtonSegment(value: SendKind.link, icon: Icon(Icons.link), label: Text('Link')),
+            ButtonSegment(value: SendKind.file, icon: Icon(Icons.attach_file), label: Text('Files')),
+          ],
+          selected: {_kind},
+          onSelectionChanged: (s) => setState(() => _kind = s.single),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _content,
+          minLines: _kind == SendKind.link ? 1 : 2,
+          maxLines: _kind == SendKind.link ? 1 : 6,
+          keyboardType: _kind == SendKind.link ? TextInputType.url : TextInputType.multiline,
+          decoration: InputDecoration(
+            labelText: switch (_kind) {
+              SendKind.text => 'Text',
+              SendKind.link => 'Link',
+              SendKind.file => 'Files',
+            },
+            hintText: switch (_kind) {
+              SendKind.text => 'Hello from %DEVID',
+              SendKind.link => 'https://example.com',
+              SendKind.file => '/storage/emulated/0/Download/report.pdf',
+            },
+            helperText: _kind == SendKind.file
+                ? 'One path per line, or a Tasker array like %files(). Variables are allowed.'
+                : 'Tasker variables are allowed.',
+            helperMaxLines: 2,
           ),
+          onChanged: (_) => setState(() {}),
+        ),
+        if (_kind != SendKind.file) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(labelText: 'Title (optional)'),
+          ),
+        ],
+        if (_kind == SendKind.file && _fileAccess == false)
+          Card.filled(
+            color: theme.colorScheme.errorContainer,
+            margin: const EdgeInsets.only(top: 12),
+            child: ListTile(
+              textColor: theme.colorScheme.onErrorContainer,
+              title: const Text('Via can\'t read your files'),
+              subtitle: const Text('To send files by path, allow Via to access all files.'),
+              trailing: TextButton(onPressed: ViaNative.requestAllFilesAccess, child: const Text('Allow')),
+            ),
+          ),
+        _buttons(onSave: canSave ? _save : null),
       ],
     );
   }

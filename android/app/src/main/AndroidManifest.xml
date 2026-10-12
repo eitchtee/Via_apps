@@ -5,11 +5,19 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Only for Tasker's "Send with Via" with files given by path; asked for when set up. -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
 
     <application
         android:label="Via"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -54,7 +62,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Tasker plugin: the "Via Command" event and the "Send Via Command" action. -->
+        <!-- Tasker plugin: the "Via Command" event, and the "Send Via Command" and "Send with
+             Via" actions, which share one fire receiver. -->
         <activity
             android:name=".tasker.CommandEventEditActivity"
             android:exported="true"
@@ -90,8 +99,22 @@
                 <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".tasker.SendItemEditActivity"
+            android:exported="true"
+            android:label="Send with Via"
+            android:icon="@mipmap/ic_launcher"
+            android:excludeFromRecents="true"
+            android:theme="@style/ShareTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+            </intent-filter>
+        </activity>
         <receiver
-            android:name=".tasker.SendCommandReceiver"
+            android:name=".tasker.TaskerActionReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.twofortyfouram.locale.intent.action.FIRE_SETTING" />

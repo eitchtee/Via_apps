@@ -78,13 +78,23 @@ class CommandEventEditActivity : TaskerEditActivity() {
 
 /** Configures the "Send Via Command" action: the devices, the command and its params. */
 class SendCommandEditActivity : TaskerEditActivity() {
-    override val mode = "action"
+    override val mode = "command"
 
     override fun complete(result: Intent, bundle: Bundle) {
         val params = (0 until (bundle.getString("param_count")?.toIntOrNull() ?: 0)).map { "param$it" }
         // Tasker replaces variables in these before firing.
         bundle.putString(Tasker.BUNDLE_VARIABLE_REPLACE_KEYS, (listOf("command") + params).joinToString(" "))
         // Run synchronously, so the task waits for the send and sees a failure.
-        result.putExtra(Tasker.EXTRA_REQUESTED_TIMEOUT, 60_000)
+        result.putExtra(Tasker.EXTRA_REQUESTED_TIMEOUT, TaskerSendWorker.timeoutMs(bundle).toInt() + 10_000)
+    }
+}
+
+/** Configures the "Send with Via" action: the devices, and text, a link or files. */
+class SendItemEditActivity : TaskerEditActivity() {
+    override val mode = "item"
+
+    override fun complete(result: Intent, bundle: Bundle) {
+        bundle.putString(Tasker.BUNDLE_VARIABLE_REPLACE_KEYS, "content title")
+        result.putExtra(Tasker.EXTRA_REQUESTED_TIMEOUT, TaskerSendWorker.timeoutMs(bundle).toInt() + 10_000)
     }
 }

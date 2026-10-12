@@ -21,6 +21,14 @@ class ViaNative {
   static Future<void> requestTaskerQuery(String activity, Map<String, Object> data) =>
       _channel.invokeMethod('requestTaskerQuery', {'activity': activity, 'data': data});
 
+  /// Whether Via may read any file in shared storage, which sending a file by path (from
+  /// Tasker) needs: "All files access" on Android 11+, storage permission on Android 10.
+  static Future<bool> hasAllFilesAccess() async =>
+      await _channel.invokeMethod<bool>('hasAllFilesAccess') ?? false;
+
+  /// Opens the system screen to grant [hasAllFilesAccess] (or asks for it on Android 10).
+  static Future<void> requestAllFilesAccess() => _channel.invokeMethod('requestAllFilesAccess');
+
   /// What was shared to the current activity, or null if it wasn't started by a share.
   static Future<SharedData?> getSharedData() async {
     final raw = await _channel.invokeMapMethod<String, dynamic>('getSharedData');
