@@ -10,8 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -183,8 +181,8 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 .setCategories(setOf(SHARE_CATEGORY))
                 .setLongLived(true)
                 .setRank(i)
-                .setIntent(open) // required, though shares go to ShareActivity
                 .apply { if (Build.VERSION.SDK_INT >= 33) setExcludedFromSurfaces(ShortcutInfo.SURFACE_LAUNCHER) }
+                .setIntent(open) // required, though shares go to ShareActivity
                 .build()
         }
         if (Build.VERSION.SDK_INT >= 30) {
@@ -198,30 +196,22 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         sm.dynamicShortcuts = shortcuts
     }
 
-    /** The device type's glyph on Via's green, as an adaptive icon. */
-    private fun targetIcon(type: String?): Icon {
-        val glyph = when (type) {
-            "android" -> R.drawable.via_target_android
-            "ios" -> R.drawable.via_target_ios
-            "desktop" -> R.drawable.via_target_desktop
-            "browser" -> R.drawable.via_target_browser
-            "cli" -> R.drawable.via_target_cli
-            "contact" -> R.drawable.via_target_contact
-            else -> R.drawable.via_target_other
-        }
-        // Adaptive icons are 108dp, of which the middle 72dp is shown.
-        val size = (108 * context.resources.displayMetrics.density).toInt()
-        val glyphSize = size * 4 / 9
-        val offset = (size - glyphSize) / 2
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(0xFF0E7C66.toInt())
-        context.getDrawable(glyph)!!.apply {
-            setBounds(offset, offset, offset + glyphSize, offset + glyphSize)
-            draw(canvas)
-        }
-        return Icon.createWithAdaptiveBitmap(bitmap)
-    }
+    /**
+     * The device type's glyph on Via's green. A resource icon, as long-lived shortcuts
+     * don't accept bitmaps.
+     */
+    private fun targetIcon(type: String?): Icon = Icon.createWithResource(
+        context,
+        when (type) {
+            "android" -> R.drawable.via_target_icon_android
+            "ios" -> R.drawable.via_target_icon_ios
+            "desktop" -> R.drawable.via_target_icon_desktop
+            "browser" -> R.drawable.via_target_icon_browser
+            "cli" -> R.drawable.via_target_icon_cli
+            "contact" -> R.drawable.via_target_icon_contact
+            else -> R.drawable.via_target_icon_other
+        },
+    )
 
     /** Copies [path] into Download/Via through MediaStore and returns the content URI. */
     private fun saveToDownloads(path: String, name: String, mime: String): String {

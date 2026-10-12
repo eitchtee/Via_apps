@@ -1,0 +1,4 @@
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/via_target_background" />
+    <foreground android:drawable="@drawable/via_target_desktop" />
+</adaptive-icon>

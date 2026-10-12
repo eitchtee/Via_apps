@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background of the share sheet target icons: Via's green. -->
+    <color name="via_target_background">#FF0E7C66</color>
+</resources>
