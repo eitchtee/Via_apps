@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets the share sheet show your devices and contacts as direct targets. The shortcuts
+     themselves are published at runtime (ViaNativePlugin.setShareTargets). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="com.kamofa.via.ShareActivity">
+        <data android:mimeType="*/*" />
+        <category android:name="com.kamofa.via.category.SHARE_TARGET" />
+    </share-target>
+</shortcuts>

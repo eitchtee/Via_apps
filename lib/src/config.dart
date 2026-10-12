@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:via_native/via_native.dart';
 
 import 'api.dart';
 
@@ -49,6 +52,7 @@ class Account {
     await _prefs.remove('device_name');
     await _prefs.remove('push_registration');
     // Keep 'server' so signing in again is quicker.
+    if (Platform.isAndroid) await ViaNative.setShareTargets([]).catchError((_) {});
   }
 
   static Future<String?> lastServer() => _prefs.getString('server');

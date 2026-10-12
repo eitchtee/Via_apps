@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:via_native/via_native.dart';
 
 import 'config.dart';
 import 'models.dart';
@@ -17,13 +18,15 @@ class OutgoingFile {
 
 /// Loads send targets and sends.
 class Sender {
-  /// Your other devices, then accepted contacts.
+  /// Your other devices, then accepted contacts. On Android, also refreshes the share
+  /// sheet's direct targets with them.
   static Future<List<Target>> targets(Account account) async {
     final api = account.api();
+    final List<Target> targets;
     try {
       final devices = await api.devices();
       final contacts = await api.contacts().catchError((_) => <Contact>[]);
-      return [
+      targets = [
         for (final d in devices)
           if (!d.current && d.id != account.deviceId) Target.device(d),
         for (final c in contacts) Target.contact(c),
@@ -31,12 +34,27 @@ class Sender {
     } finally {
       api.close();
     }
+    if (Platform.isAndroid) await _publishShareTargets(targets).catchError((_) {});
+    return targets;
+  }
+
+  /// The last used targets come first, as the share sheet shows only a few.
+  static Future<void> _publishShareTargets(List<Target> targets) async {
+    final last = await lastTargets();
+    final ordered = [
+      for (final id in last) ...targets.where((t) => t.id == id),
+      ...targets.where((t) => !last.contains(t.id)),
+    ];
+    await ViaNative.setShareTargets([for (final t in ordered) ShareTarget(t.id, t.label, t.type)]);
   }
 
   static Future<List<String>> lastTargets() async =>
       (await Prefs.getString('last_targets'))?.split(',').where((s) => s.isNotEmpty).toList() ?? [];
 
-  static Future<void> rememberTargets(List<String> ids) => Prefs.setString('last_targets', ids.join(','));
+  static Future<void> rememberTargets(List<String> ids) async {
+    await Prefs.setString('last_targets', ids.join(','));
+    if (Platform.isAndroid) await ViaNative.reportShareTargetUsed(ids).catchError((_) {});
+  }
 
   /// Sends one item. For files, [onProgress] reports the overall fraction (0..1).
   static Future<void> send(

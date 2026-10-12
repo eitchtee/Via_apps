@@ -11,6 +11,7 @@ import 'src/history.dart';
 import 'src/live.dart';
 import 'src/notify.dart';
 import 'src/receiver.dart';
+import 'src/sender.dart';
 import 'src/tasker.dart';
 import 'ui/home.dart';
 import 'ui/onboarding.dart';
@@ -156,6 +157,11 @@ class _ViaAppState extends State<ViaApp> with WidgetsBindingObserver {
     await Notify.requestPermission();
     await AndroidBackground.schedule();
     await AndroidBackground.registerPush();
+    // Refreshes the share sheet's direct targets.
+    final account = _account;
+    if (Platform.isAndroid && account != null) {
+      unawaited(Sender.targets(account).then((_) {}, onError: (_) {}));
+    }
   }
 
   @override
