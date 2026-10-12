@@ -23,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late Account _account = widget.account;
   bool _autoOpen = true;
   bool _autoCopy = true;
+  bool _commands = false;
   bool _contactCommands = false;
   bool? _startup;
 
@@ -35,12 +36,14 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadPrefs() async {
     final autoOpen = await Prefs.getBool('auto_open_links', fallback: true);
     final autoCopy = await Prefs.getBool('auto_copy_text', fallback: true);
+    final commands = await Tasker.commandsEnabled();
     final contactCommands = await Tasker.acceptsFromContacts();
     final startup = Desktop.supported ? await Desktop.instance.startsWithWindows() : null;
     if (mounted) {
       setState(() {
         _autoOpen = autoOpen;
         _autoCopy = autoCopy;
+        _commands = commands;
         _contactCommands = contactCommands;
         _startup = startup;
       });
@@ -227,24 +230,31 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
           if (Platform.isAndroid) ...[
-            header('Commands'),
-            ListTile(
-              leading: const Icon(Icons.bolt),
-              title: const Text('Tasker commands'),
+            header('Tasker'),
+            SwitchListTile(
+              secondary: const Icon(Icons.bolt),
+              title: const Text('Pass commands to Tasker'),
               subtitle: const Text(
-                'Text like !:name::param::param from your devices goes to the "Via Command" '
-                'event in Tasker instead of being shown or copied.',
+                'Text like !:name::param from your devices goes to the "Via Command" event '
+                'instead of being shown or copied',
               ),
+              value: _commands,
+              onChanged: (v) {
+                setState(() => _commands = v);
+                Tasker.setCommandsEnabled(v);
+              },
             ),
             SwitchListTile(
               secondary: const Icon(Icons.person_outline),
-              title: const Text('Accept commands from contacts'),
+              title: const Text('Also from contacts'),
               subtitle: const Text('Off: commands from contacts arrive as normal text'),
-              value: _contactCommands,
-              onChanged: (v) {
-                setState(() => _contactCommands = v);
-                Tasker.setAcceptsFromContacts(v);
-              },
+              value: _commands && _contactCommands,
+              onChanged: _commands
+                  ? (v) {
+                      setState(() => _contactCommands = v);
+                      Tasker.setAcceptsFromContacts(v);
+                    }
+                  : null,
             ),
           ],
           if (_startup != null) ...[

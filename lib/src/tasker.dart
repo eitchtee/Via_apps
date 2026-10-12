@@ -12,6 +12,10 @@ class Tasker {
   /// The event's edit activity, which names the event when asking Tasker to query it.
   static const _eventActivity = 'com.kamofa.via.tasker.CommandEventEditActivity';
 
+  /// Commands go to Tasker only when this is on; otherwise they're plain text.
+  static Future<bool> commandsEnabled() => Prefs.getBool('tasker_commands');
+  static Future<void> setCommandsEnabled(bool v) => Prefs.setBool('tasker_commands', v);
+
   /// Accepting commands from contacts is opt-in: they would run your Tasker tasks.
   static Future<bool> acceptsFromContacts() => Prefs.getBool('commands_from_contacts');
   static Future<void> setAcceptsFromContacts(bool v) => Prefs.setBool('commands_from_contacts', v);

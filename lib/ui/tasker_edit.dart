@@ -103,6 +103,13 @@ class _EventForm extends StatefulWidget {
 
 class _EventFormState extends State<_EventForm> {
   late final _commands = TextEditingController(text: widget.values['commands'] ?? '');
+  bool? _enabled;
+
+  @override
+  void initState() {
+    super.initState();
+    Tasker.commandsEnabled().then((v) => setState(() => _enabled = v));
+  }
 
   List<String> get _names => [
     for (final n in _commands.text.split(',')) if (n.trim().isNotEmpty) n.trim(),
@@ -128,6 +135,23 @@ class _EventFormState extends State<_EventForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _header(context, 'Via Command'),
+        if (_enabled == false)
+          Card.filled(
+            color: theme.colorScheme.errorContainer,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              textColor: theme.colorScheme.onErrorContainer,
+              title: const Text('Commands are off'),
+              subtitle: const Text('Via treats them as normal text until you turn them on.'),
+              trailing: TextButton(
+                onPressed: () async {
+                  await Tasker.setCommandsEnabled(true);
+                  setState(() => _enabled = true);
+                },
+                child: const Text('Turn on'),
+              ),
+            ),
+          ),
         TextField(
           controller: _commands,
           autofocus: true,

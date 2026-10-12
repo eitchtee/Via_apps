@@ -15,7 +15,8 @@ import 'platform.dart';
 import 'tasker.dart';
 
 /// Fetches the inbox and handles each item: links are opened, text is copied, files are
-/// saved to Downloads. On Android, text that is a command ([ViaCommand]) goes to Tasker. An item is acked only once handled (see the server's clients.md).
+/// saved to Downloads. On Android, text that is a command ([ViaCommand]) goes to Tasker when
+/// that is turned on. An item is acked only once handled (see the server's clients.md).
 class Receiver {
   /// Whether the app is visible. On Android, links can't be opened from the background,
   /// so they wait for a tap on the notification.
@@ -148,7 +149,7 @@ class Receiver {
 
       case 'note':
         final text = item.body ?? item.title ?? '';
-        final command = Platform.isAndroid ? ViaCommand.parse(text) : null;
+        final command = Platform.isAndroid && await Tasker.commandsEnabled() ? ViaCommand.parse(text) : null;
         if (command != null && (!fromContact || await Tasker.acceptsFromContacts())) {
           // No notification and no clipboard: only Tasker sees it.
           try {
