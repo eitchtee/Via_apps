@@ -70,6 +70,8 @@ class SharedData {
     : text = raw['text'] as String?,
       subject = raw['subject'] as String?,
       target = raw['target'] as String?,
+      targetLabel = raw['targetLabel'] as String?,
+      targetType = raw['targetType'] as String?,
       files = [
         for (final f in (raw['files'] as List? ?? const []))
           SharedFile(
@@ -86,4 +88,8 @@ class SharedData {
 
   /// The [ShareTarget.id] picked in the share sheet, if a direct target was used.
   final String? target;
+
+  /// The picked target's [ShareTarget.label] and [ShareTarget.type], when known.
+  final String? targetLabel;
+  final String? targetType;
 }

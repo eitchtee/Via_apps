@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.PersistableBundle
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -181,6 +182,7 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 .setCategories(setOf(SHARE_CATEGORY))
                 .setLongLived(true)
                 .setRank(i)
+                .setExtras(PersistableBundle().apply { putString("type", t["type"]) })
                 .setIntent(open) // required, though shares go to ShareActivity
                 .build()
         }
@@ -248,13 +250,29 @@ class ViaNativePlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
         val dir = File(context.cacheDir, "share").apply { deleteRecursively(); mkdirs() }
         val files = uris.mapIndexedNotNull { i, uri -> copyToCache(uri, File(dir, i.toString())) }
+        val target = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)
+        val shortcut = target?.let { findShareTarget(it) }
         return mapOf(
             "text" to intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
             "subject" to intent.getStringExtra(Intent.EXTRA_SUBJECT),
             "files" to files,
             // Set when the user picked one of the share sheet's direct targets.
-            "target" to intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID),
+            "target" to target,
+            "targetLabel" to shortcut?.shortLabel?.toString(),
+            "targetType" to shortcut?.extras?.getString("type"),
         )
+    }
+
+    /** One of the share targets published by [setShareTargets], if still there. */
+    private fun findShareTarget(id: String): ShortcutInfo? {
+        if (Build.VERSION.SDK_INT < 29) return null
+        val sm = context.getSystemService(ShortcutManager::class.java)
+        val shortcuts = if (Build.VERSION.SDK_INT >= 30) {
+            sm.getShortcuts(ShortcutManager.FLAG_MATCH_DYNAMIC or ShortcutManager.FLAG_MATCH_CACHED)
+        } else {
+            sm.dynamicShortcuts
+        }
+        return shortcuts.find { it.id == id }
     }
 
     private fun copyToCache(uri: Uri, dir: File): Map<String, Any>? {
