@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:via_native/via_native.dart';
 
@@ -34,7 +35,11 @@ class Sender {
     } finally {
       api.close();
     }
-    if (Platform.isAndroid) await _publishShareTargets(targets).catchError((_) {});
+    if (Platform.isAndroid) {
+      await _publishShareTargets(
+        targets,
+      ).catchError((Object e) => debugPrint('Could not publish share targets: $e'));
+    }
     return targets;
   }
 
