@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:via_native/via_native.dart';
 
+import '../src/api.dart';
 import '../src/config.dart';
 import '../src/sender.dart';
 import 'compose.dart';
 
 /// Android share target: a dialog over the sharing app that works out whether a link,
-/// text or files were shared, and asks which devices to send them to.
+/// text or files were shared, and asks which devices to send them to. When a device was
+/// picked in the share sheet, it only shows the send's progress.
 class SharePopup extends StatefulWidget {
   const SharePopup({super.key});
 
@@ -20,6 +22,9 @@ class _SharePopupState extends State<SharePopup> {
   SharedData? _data;
   bool _loading = true;
   String? _error;
+
+  /// The user asked for the full form after a direct send failed.
+  bool _chooseDevices = false;
 
   @override
   void initState() {
@@ -129,6 +134,23 @@ class _SharePopupState extends State<SharePopup> {
       }
     }
 
+    final target = data.target;
+    if (target != null && !_chooseDevices) {
+      return _DirectSend(
+        account: account!,
+        kind: kind,
+        to: target,
+        label: data.targetLabel ?? 'your device',
+        type: data.targetType ?? 'other',
+        text: text,
+        title: title,
+        files: files,
+        onSent: () => Future<void>.delayed(const Duration(milliseconds: 700), _close),
+        onChooseDevices: () => setState(() => _chooseDevices = true),
+        onClose: _close,
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,12 +181,133 @@ class _SharePopupState extends State<SharePopup> {
           title: kind == SendKind.link ? title : null,
           files: files,
           popup: true,
-          sendTo: data.target,
+          initialTargets: target == null ? null : [target],
           onSent: (message) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
             Future<void>.delayed(const Duration(milliseconds: 700), _close);
           },
         ),
+      ],
+    );
+  }
+}
+
+/// Sends to the target picked in the share sheet right away, showing only the progress.
+/// On failure it offers to retry or to pick devices in the full form.
+class _DirectSend extends StatefulWidget {
+  const _DirectSend({
+    required this.account,
+    required this.kind,
+    required this.to,
+    required this.label,
+    required this.type,
+    this.text,
+    this.title,
+    this.files = const [],
+    required this.onSent,
+    required this.onChooseDevices,
+    required this.onClose,
+  });
+
+  final Account account;
+  final SendKind kind;
+  final String to;
+  final String label;
+  final String type;
+  final String? text;
+  final String? title;
+  final List<OutgoingFile> files;
+  final VoidCallback onSent;
+  final VoidCallback onChooseDevices;
+  final VoidCallback onClose;
+
+  @override
+  State<_DirectSend> createState() => _DirectSendState();
+}
+
+class _DirectSendState extends State<_DirectSend> {
+  bool _sent = false;
+  String? _error;
+  double? _progress;
+
+  @override
+  void initState() {
+    super.initState();
+    _send();
+  }
+
+  Future<void> _send() async {
+    setState(() {
+      _error = null;
+      _progress = widget.kind == SendKind.file ? 0 : null;
+    });
+    try {
+      await Sender.send(
+        widget.account,
+        widget.kind,
+        [widget.to],
+        text: widget.text,
+        title: widget.title,
+        files: widget.files,
+        onProgress: (p, _) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+      await Sender.rememberTargets([widget.to]);
+      if (!mounted) return;
+      setState(() => _sent = true);
+      widget.onSent();
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not send: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final error = _error;
+    final String status;
+    if (error != null) {
+      status = 'Could not send to ${widget.label}';
+    } else if (_sent) {
+      status = 'Sent to ${widget.label}';
+    } else {
+      status = 'Sending to ${widget.label}…';
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(
+              _sent ? Icons.check_circle : iconForType(widget.type),
+              color: error != null ? theme.colorScheme.error : theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(status, style: theme.textTheme.titleMedium)),
+            IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: widget.onClose),
+          ],
+        ),
+        if (error == null && !_sent) ...[
+          const SizedBox(height: 12),
+          LinearProgressIndicator(value: _progress),
+        ],
+        if (error != null) ...[
+          const SizedBox(height: 8),
+          Text(error, style: TextStyle(color: theme.colorScheme.error)),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: widget.onChooseDevices, child: const Text('Choose devices')),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: _send, child: const Text('Retry')),
+            ],
+          ),
+        ],
       ],
     );
   }

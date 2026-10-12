@@ -40,7 +40,7 @@ class ComposeForm extends StatefulWidget {
     this.title,
     this.files = const [],
     this.popup = false,
-    this.sendTo,
+    this.initialTargets,
     required this.onSent,
   });
 
@@ -51,9 +51,8 @@ class ComposeForm extends StatefulWidget {
   final List<OutgoingFile> files;
   final bool popup;
 
-  /// A target to send to right away, without asking (a share sheet direct target). If
-  /// it's gone, the form asks as usual.
-  final String? sendTo;
+  /// Targets to select at first instead of the last used ones.
+  final List<String>? initialTargets;
   final void Function(String message) onSent;
 
   @override
@@ -86,7 +85,7 @@ class _ComposeFormState extends State<ComposeForm> {
     setState(() => _loadError = null);
     try {
       final targets = await Sender.targets(widget.account);
-      final last = await Sender.lastTargets();
+      final last = widget.initialTargets ?? await Sender.lastTargets();
       if (!mounted) return;
       setState(() {
         _targets = targets;
@@ -96,15 +95,6 @@ class _ComposeFormState extends State<ComposeForm> {
         // With a single other device, there's nothing to choose.
         if (_selected.isEmpty && targets.length == 1) _selected.add(targets.single.id);
       });
-      final sendTo = widget.sendTo;
-      if (sendTo != null && targets.any((t) => t.id == sendTo)) {
-        setState(
-          () => _selected
-            ..clear()
-            ..add(sendTo),
-        );
-        await _send();
-      }
     } catch (e) {
       if (mounted) setState(() => _loadError = '$e');
     }
