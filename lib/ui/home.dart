@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../src/command.dart';
@@ -205,6 +206,10 @@ class _HistoryTabState extends State<HistoryTab> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _openLink(String url) async {
+    if (!await LocalActions.openUrl(url)) _snack('Could not open the link');
+  }
+
   @override
   Widget build(BuildContext context) {
     final entries = _entries;
@@ -251,13 +256,18 @@ class _HistoryTabState extends State<HistoryTab> with WidgetsBindingObserver {
                 return _HistoryTile(
                   entry: e,
                   onTap: () async => _snack(await Receiver.activate(e)),
+                  onOpenLink: _openLink,
                   onAction: (action) async {
                     switch (action) {
                       case 'copy':
                         await LocalActions.copyText(e.url ?? e.body ?? e.title ?? '');
                         _snack('Copied to clipboard');
+                      case 'open':
+                        await _openLink(singleLink(e.body ?? e.title ?? '')!);
                       case 'folder':
-                        if (!await LocalActions.showInFolder(e.location!)) _snack('Could not open the folder');
+                        if (!await LocalActions.showInFolder(e.location!)) {
+                          _snack('Could not open the folder');
+                        }
                       case 'retry':
                         await Receiver.retry(e.id);
                       case 'delete':
@@ -286,10 +296,16 @@ Future<bool> _confirm(BuildContext context, String title, String body) async =>
     false;
 
 class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.entry, required this.onTap, required this.onAction});
+  const _HistoryTile({
+    required this.entry,
+    required this.onTap,
+    required this.onOpenLink,
+    required this.onAction,
+  });
 
   final HistoryEntry entry;
   final VoidCallback onTap;
+  final void Function(String url) onOpenLink;
   final void Function(String action) onAction;
 
   @override
@@ -312,24 +328,30 @@ class _HistoryTile extends StatelessWidget {
       _ => (Icons.help_outline, e.kind, null),
     };
     final failed = e.status != 'ok';
+    final note = e.kind == 'note';
+    final hasDetail = detail != null && detail.isNotEmpty;
+    final meta = '${e.from} · ${_when(e.receivedAt)}';
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: failed ? theme.colorScheme.errorContainer : theme.colorScheme.secondaryContainer,
         foregroundColor: failed ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSecondaryContainer,
         child: Icon(icon),
       ),
-      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        [if (detail != null && detail.isNotEmpty) detail, '${e.from} · ${_when(e.receivedAt)}'].join('\n'),
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-      isThreeLine: detail != null && detail.isNotEmpty,
+      // Links in received text are tappable; tapping elsewhere still copies the text.
+      title: note && e.title == null
+          ? _LinkText(title, onOpen: onOpenLink, maxLines: 2)
+          : Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: note && hasDetail
+          ? _LinkText(detail, suffix: '\n$meta', onOpen: onOpenLink, maxLines: 3)
+          : Text([if (hasDetail) detail, meta].join('\n'), maxLines: 3, overflow: TextOverflow.ellipsis),
+      isThreeLine: hasDetail,
       onTap: onTap,
       trailing: PopupMenuButton<String>(
         onSelected: onAction,
         itemBuilder: (_) => [
           if (e.kind != 'file') const PopupMenuItem(value: 'copy', child: Text('Copy')),
+          if (note && singleLink(e.body ?? e.title ?? '') != null)
+            const PopupMenuItem(value: 'open', child: Text('Open link')),
           if (e.kind == 'file' && e.status == 'failed')
             const PopupMenuItem(value: 'retry', child: Text('Retry')),
           if (e.kind == 'file' && e.location != null && (Platform.isWindows || Platform.isAndroid))
@@ -354,5 +376,67 @@ class _HistoryTile extends StatelessWidget {
     final time = '${two(local.hour)}:${two(local.minute)}';
     if (local.year == now.year && local.month == now.month && local.day == now.day) return time;
     return '${local.year}-${two(local.month)}-${two(local.day)} $time';
+  }
+}
+
+/// Text with its http(s) URLs as tappable links, then an optional plain [suffix].
+class _LinkText extends StatefulWidget {
+  const _LinkText(this.text, {this.suffix, required this.onOpen, this.maxLines});
+
+  final String text;
+  final String? suffix;
+  final void Function(String url) onOpen;
+  final int? maxLines;
+
+  @override
+  State<_LinkText> createState() => _LinkTextState();
+}
+
+class _LinkTextState extends State<_LinkText> {
+  final _recognizers = <TapGestureRecognizer>[];
+
+  void _clear() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  @override
+  void dispose() {
+    _clear();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _clear();
+    final colors = Theme.of(context).colorScheme;
+    final text = widget.text;
+    final spans = <InlineSpan>[];
+    var at = 0;
+    for (final link in findLinks(text)) {
+      spans.add(TextSpan(text: text.substring(at, link.start)));
+      final recognizer = TapGestureRecognizer()..onTap = () => widget.onOpen(link.url);
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: link.url,
+          style: TextStyle(
+            color: colors.primary,
+            decoration: TextDecoration.underline,
+            decorationColor: colors.primary,
+          ),
+          recognizer: recognizer,
+        ),
+      );
+      at = link.end;
+    }
+    spans.add(TextSpan(text: text.substring(at) + (widget.suffix ?? '')));
+    return Text.rich(
+      TextSpan(children: spans),
+      maxLines: widget.maxLines,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 }
