@@ -109,11 +109,44 @@ bool looksLikeLink(String text) {
 /// Finds the URL in shared text like "Some title https://example.com".
 String? extractLink(String text) {
   if (looksLikeLink(text)) return text.trim();
-  final matches = RegExp(r'https?://\S+').allMatches(text).toList();
-  if (matches.length != 1) return null;
-  final rest = text.replaceFirst(matches.single.group(0)!, '').trim();
+  final links = findLinks(text);
+  if (links.length != 1) return null;
+  final rest = text.replaceFirst(links.single.url, '').trim();
   // Only when the rest is short, like a page title; otherwise it's text with a link in it.
-  return rest.length <= 200 && !rest.contains('\n\n') ? matches.single.group(0) : null;
+  return rest.length <= 200 && !rest.contains('\n\n') ? links.single.url : null;
+}
+
+typedef FoundLink = ({String url, int start, int end});
+
+final _urlPattern = RegExp(r'\bhttps?://[^\s<>"]+', caseSensitive: false);
+
+/// The http(s) URLs in [text], without trailing punctuation like "see https://x.com."
+/// Received text stays text; this only makes the links in it tappable.
+List<FoundLink> findLinks(String text) => [
+  for (final m in _urlPattern.allMatches(text))
+    if (_trimUrl(m.group(0)!) case final url when looksLikeLink(url))
+      (url: url, start: m.start, end: m.start + url.length),
+];
+
+/// The single URL in [text], or null when it has none or several.
+String? singleLink(String text) {
+  final links = findLinks(text);
+  return links.length == 1 ? links.single.url : null;
+}
+
+/// Drops punctuation that ends a sentence, and a ")" or "]" that closes a bracket around the URL.
+String _trimUrl(String url) {
+  int count(String ch) => ch.allMatches(url).length;
+  while (url.isNotEmpty) {
+    final last = url[url.length - 1];
+    final drop =
+        '.,;:!?\'"*'.contains(last) ||
+        (last == ')' && count('(') < count(')')) ||
+        (last == ']' && count('[') < count(']'));
+    if (!drop) break;
+    url = url.substring(0, url.length - 1);
+  }
+  return url;
 }
 
 String normalizeLink(String input) {

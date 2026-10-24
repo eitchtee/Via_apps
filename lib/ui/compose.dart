@@ -42,6 +42,7 @@ class ComposeForm extends StatefulWidget {
     this.popup = false,
     this.initialTargets,
     required this.onSent,
+    this.onKindChanged,
   });
 
   final Account account;
@@ -55,11 +56,15 @@ class ComposeForm extends StatefulWidget {
   final List<String>? initialTargets;
   final void Function(String message) onSent;
 
+  /// Called when the user switches text that looks like a link over to a link.
+  final void Function(SendKind kind)? onKindChanged;
+
   @override
   State<ComposeForm> createState() => _ComposeFormState();
 }
 
 class _ComposeFormState extends State<ComposeForm> {
+  late SendKind _kind = widget.kind;
   late final _text = TextEditingController(text: widget.initialText ?? '');
   late List<OutgoingFile> _files = [...widget.files];
   List<Target>? _targets;
@@ -100,7 +105,7 @@ class _ComposeFormState extends State<ComposeForm> {
     }
   }
 
-  bool get _hasContent => switch (widget.kind) {
+  bool get _hasContent => switch (_kind) {
     SendKind.file => _files.isNotEmpty,
     _ => _text.text.trim().isNotEmpty,
   };
@@ -114,12 +119,12 @@ class _ComposeFormState extends State<ComposeForm> {
     setState(() {
       _sending = true;
       _sendError = null;
-      _progress = widget.kind == SendKind.file ? 0 : null;
+      _progress = _kind == SendKind.file ? 0 : null;
     });
     try {
       await Sender.send(
         widget.account,
-        widget.kind,
+        _kind,
         to,
         text: _text.text,
         title: widget.title,
@@ -177,7 +182,7 @@ class _ComposeFormState extends State<ComposeForm> {
   }
 
   Widget _content(ThemeData theme) {
-    switch (widget.kind) {
+    switch (_kind) {
       case SendKind.link:
         return TextField(
           controller: _text,
@@ -193,7 +198,7 @@ class _ComposeFormState extends State<ComposeForm> {
           onSubmitted: (_) => _send(),
         );
       case SendKind.text:
-        return TextField(
+        final field = TextField(
           controller: _text,
           autofocus: !widget.popup && _text.text.isEmpty,
           minLines: widget.popup ? 2 : 5,
@@ -204,6 +209,21 @@ class _ComposeFormState extends State<ComposeForm> {
             border: OutlineInputBorder(),
           ),
           onChanged: (_) => setState(() {}),
+        );
+        if (!looksLikeLink(_text.text)) return field;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            field,
+            Row(
+              children: [
+                Icon(Icons.link, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Looks like a link', style: theme.textTheme.bodySmall)),
+                TextButton(onPressed: _sending ? null : _switchToLink, child: const Text('Send as link')),
+              ],
+            ),
+          ],
         );
       case SendKind.file:
         return Card.outlined(
@@ -229,6 +249,14 @@ class _ComposeFormState extends State<ComposeForm> {
           ),
         );
     }
+  }
+
+  void _switchToLink() {
+    setState(() {
+      _kind = SendKind.link;
+      _text.text = _text.text.trim();
+    });
+    widget.onKindChanged?.call(_kind);
   }
 
   Widget _targetPicker(ThemeData theme) {
@@ -292,7 +320,7 @@ class _ComposeFormState extends State<ComposeForm> {
 }
 
 /// Full-screen Send page (main app).
-class ComposePage extends StatelessWidget {
+class ComposePage extends StatefulWidget {
   const ComposePage({super.key, required this.account, required this.kind, this.files = const []});
 
   final Account account;
@@ -300,9 +328,16 @@ class ComposePage extends StatelessWidget {
   final List<OutgoingFile> files;
 
   @override
+  State<ComposePage> createState() => _ComposePageState();
+}
+
+class _ComposePageState extends State<ComposePage> {
+  late var _kind = widget.kind;
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(titleForKind(kind, files.length))),
+      appBar: AppBar(title: Text(titleForKind(_kind, widget.files.length))),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -310,9 +345,10 @@ class ComposePage extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: ComposeForm(
-                account: account,
-                kind: kind,
-                files: files,
+                account: widget.account,
+                kind: widget.kind,
+                files: widget.files,
+                onKindChanged: (kind) => setState(() => _kind = kind),
                 onSent: (message) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
                   Navigator.of(context).pop();
