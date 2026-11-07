@@ -56,7 +56,7 @@ class ComposeForm extends StatefulWidget {
   final List<String>? initialTargets;
   final void Function(String message) onSent;
 
-  /// Called when the user switches text that looks like a link over to a link.
+  /// Called when the user switches between sending as a link and as text.
   final void Function(SendKind kind)? onKindChanged;
 
   @override
@@ -184,7 +184,7 @@ class _ComposeFormState extends State<ComposeForm> {
   Widget _content(ThemeData theme) {
     switch (_kind) {
       case SendKind.link:
-        return TextField(
+        final field = TextField(
           controller: _text,
           autofocus: !widget.popup && _text.text.isEmpty,
           keyboardType: TextInputType.url,
@@ -197,6 +197,9 @@ class _ComposeFormState extends State<ComposeForm> {
           onChanged: (_) => setState(() {}),
           onSubmitted: (_) => _send(),
         );
+        // Text never opens by itself on the other side.
+        if (!widget.popup) return field;
+        return _withKindSwitch(theme, field, 'May open automatically', 'Send as text', SendKind.text);
       case SendKind.text:
         final field = TextField(
           controller: _text,
@@ -211,20 +214,7 @@ class _ComposeFormState extends State<ComposeForm> {
           onChanged: (_) => setState(() {}),
         );
         if (!looksLikeLink(_text.text)) return field;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            field,
-            Row(
-              children: [
-                Icon(Icons.link, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Looks like a link', style: theme.textTheme.bodySmall)),
-                TextButton(onPressed: _sending ? null : _switchToLink, child: const Text('Send as link')),
-              ],
-            ),
-          ],
-        );
+        return _withKindSwitch(theme, field, 'Looks like a link', 'Send as link', SendKind.link);
       case SendKind.file:
         return Card.outlined(
           margin: EdgeInsets.zero,
@@ -251,12 +241,29 @@ class _ComposeFormState extends State<ComposeForm> {
     }
   }
 
-  void _switchToLink() {
+  Widget _withKindSwitch(ThemeData theme, Widget field, String hint, String action, SendKind kind) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field,
+        Row(
+          children: [
+            Icon(iconForKind(kind), size: 18, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(child: Text(hint, style: theme.textTheme.bodySmall)),
+            TextButton(onPressed: _sending ? null : () => _switchTo(kind), child: Text(action)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _switchTo(SendKind kind) {
     setState(() {
-      _kind = SendKind.link;
+      _kind = kind;
       _text.text = _text.text.trim();
     });
-    widget.onKindChanged?.call(_kind);
+    widget.onKindChanged?.call(kind);
   }
 
   Widget _targetPicker(ThemeData theme) {
