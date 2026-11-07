@@ -26,6 +26,9 @@ class _SharePopupState extends State<SharePopup> {
   /// The user asked for the full form after a direct send failed.
   bool _chooseDevices = false;
 
+  /// What the form was switched to, if it was.
+  SendKind? _switchedKind;
+
   @override
   void initState() {
     super.initState();
@@ -157,9 +160,11 @@ class _SharePopupState extends State<SharePopup> {
       children: [
         Row(
           children: [
-            Icon(iconForKind(kind), color: theme.colorScheme.primary),
+            Icon(iconForKind(_switchedKind ?? kind), color: theme.colorScheme.primary),
             const SizedBox(width: 12),
-            Expanded(child: Text(titleForKind(kind, files.length), style: theme.textTheme.titleLarge)),
+            Expanded(
+              child: Text(titleForKind(_switchedKind ?? kind, files.length), style: theme.textTheme.titleLarge),
+            ),
             IconButton(tooltip: 'Cancel', icon: const Icon(Icons.close), onPressed: _close),
           ],
         ),
@@ -182,6 +187,7 @@ class _SharePopupState extends State<SharePopup> {
           files: files,
           popup: true,
           initialTargets: target == null ? null : [target],
+          onKindChanged: (kind) => setState(() => _switchedKind = kind),
           onSent: (message) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
             Future<void>.delayed(const Duration(milliseconds: 700), _close);
