@@ -1,9 +1,11 @@
 package com.kamofa.via
 
 import android.content.Context
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -24,6 +26,8 @@ class WakeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<WakeWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                // Without it, Android blocks the network for a background app's job.
+                .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
                 .build()
             // APPEND_OR_REPLACE: a wake during a running sync queues exactly one more.
             WorkManager.getInstance(context)
