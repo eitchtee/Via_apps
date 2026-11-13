@@ -4,9 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -36,6 +38,8 @@ class TaskerActionReceiver : BroadcastReceiver() {
         val job = File(dir, "${UUID.randomUUID()}.json").apply { writeText(values.toString()) }
         val request = OneTimeWorkRequestBuilder<TaskerSendWorker>()
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            // Without it, Android blocks the network for a background app's job.
+            .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
             .setInputData(
                 workDataOf(
                     "job" to job.absolutePath,
